@@ -13,11 +13,11 @@ const SystemConfigSchema = new mongoose.Schema({
   },
   merchantUpiVpa: {
     type: String,
-    default: 'aurapay.merchant@okaxis'
+    default: '7891262336@okbizaxis'
   },
   merchantName: {
     type: String,
-    default: 'AuraPay Merchant Store'
+    default: 'MAHENDRA KIRANA STORE'
   },
   webhookSecret: {
     type: String,

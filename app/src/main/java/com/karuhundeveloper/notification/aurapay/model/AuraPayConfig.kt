@@ -17,6 +17,6 @@ data class AuraPayConfig(
         "in.org.npci.upiapp"
     ),
     val mongoUri: String = "mongodb://127.0.0.1:27017/aurapay",
-    val merchantUpiVpa: String = "aurapay.merchant@okaxis",
-    val merchantName: String = "AuraPay Merchant Store"
+    val merchantUpiVpa: String = "7891262336@okbizaxis",
+    val merchantName: String = "MAHENDRA KIRANA STORE"
 )

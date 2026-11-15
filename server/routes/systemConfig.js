@@ -28,8 +28,8 @@ router.get('/', async (req, res) => {
       // Fallback if DB is disconnected
       config = {
         mongoUri: getCurrentUri(),
-        merchantUpiVpa: 'aurapay.merchant@okaxis',
-        merchantName: 'AuraPay Merchant Store',
+        merchantUpiVpa: '7891262336@okbizaxis',
+        merchantName: 'MAHENDRA KIRANA STORE',
         targetPackages: [
           'com.google.nbu.paisa.merchant',
           'com.phonepe.app.business',
