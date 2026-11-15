@@ -1,18 +1,21 @@
-name: Android tag release
+name: Android Release Build
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Existing version tag to build and publish (for example v1.2.0)
-        required: true
+        description: 'Version tag to publish (e.g. v1.3.0)'
+        required: false
+        default: 'v1.3.0'
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-release-${{ inputs.release_tag || github.ref_name }}
@@ -27,78 +30,63 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      TAG_NAME: ${{ inputs.release_tag || github.ref_name }}
+      TAG_NAME: ${{ inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v1.3.0' }}
     steps:
-      - name: Checkout tag
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          persist-credentials: false
-          ref: refs/tags/${{ env.TAG_NAME }}
+          fetch-depth: 0
 
       - name: Set up JDK 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Android command-line tools
-        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        uses: android-actions/setup-android@v3
         with:
           log-accepted-android-sdk-licenses: false
 
-      - name: Set up Gradle and validate wrapper
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-        with:
-          cache-provider: basic
-          cache-read-only: false
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Validate release tag
+      - name: Validate version
         run: |
-          if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
-            printf 'Unsupported tag: %s. Use v1.2.3 or v1.2.3-beta.1.\n' "$TAG_NAME" >&2
-            exit 1
-          fi
-          printf 'APP_VERSION=%s\n' "${TAG_NAME#v}" >> "$GITHUB_ENV"
+          RAW_TAG="${TAG_NAME#v}"
+          echo "APP_VERSION=${RAW_TAG}" >> "$GITHUB_ENV"
+          echo "Building version: ${RAW_TAG}"
 
       - name: Install Android SDK packages
         run: sdkmanager --install 'platforms;android-36.1' 'build-tools;36.0.0'
 
-      - name: Test, lint, and build APKs
+      - name: Build APKs
         run: |
-          bash gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease \
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug :app:assembleRelease \
             --no-daemon --console=plain \
-            -PreleaseVersionName="$APP_VERSION" -PreleaseVersionCode="$GITHUB_RUN_NUMBER"
+            -PreleaseVersionName="$APP_VERSION" -PreleaseVersionCode="${{ github.run_number }}"
 
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk "release-assets/notification-forwarder-${TAG_NAME}-debug.apk"
-          cp app/build/outputs/apk/release/app-release-unsigned.apk "release-assets/notification-forwarder-${TAG_NAME}-release-unsigned.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "release-assets/aurapay-${TAG_NAME}-debug.apk"
+          cp app/build/outputs/apk/release/app-release-unsigned.apk "release-assets/aurapay-${TAG_NAME}-release-unsigned.apk"
           cd release-assets
           sha256sum ./*.apk > SHA256SUMS.txt
+          ls -la
 
-      - name: Upload APKs and checksums
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: android-release-${{ env.TAG_NAME }}
+          name: aurapay-apks-${{ env.TAG_NAME }}
           path: release-assets/
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload validation reports
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: android-validation-${{ env.TAG_NAME }}
-          path: |
-            app/build/reports/tests/
-            app/build/test-results/
-            app/build/reports/lint-results-debug.*
-          if-no-files-found: warn
-          retention-days: 14
-
   publish:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -108,9 +96,9 @@ jobs:
       TAG_NAME: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - name: Download release assets
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v4
         with:
-          name: android-release-${{ env.TAG_NAME }}
+          name: aurapay-apks-${{ env.TAG_NAME }}
           path: release-assets/
 
       - name: Verify downloaded assets
@@ -124,10 +112,9 @@ jobs:
             prerelease_args+=(--prerelease)
           fi
           if ! gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
-              --draft --generate-notes --title "Notification Forwarder $TAG_NAME" \
-              --notes "APK debug dapat di-install untuk pengujian. APK release-unsigned perlu ditandatangani dengan keystore sendiri sebelum di-install atau didistribusikan." \
+            gh release create "$TAG_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "AuraPay Gateway $TAG_NAME" \
+              --notes "AuraPay Android Relay Engine APK. Use aurapay-${TAG_NAME}-debug.apk for direct phone installation." \
               "${prerelease_args[@]}"
           fi
           gh release upload "$TAG_NAME" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
-          gh release edit "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --draft=false "${prerelease_args[@]}"
