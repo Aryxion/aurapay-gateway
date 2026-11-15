@@ -109,21 +109,39 @@ class AppNotificationListener : NotificationListenerService() {
         capturedAt: Long
     ) {
         val config = auraPayPrefs.loadConfig()
-        // Check if package matches whitelist or standard UPI merchants
+        val lowerPkg = packageName.lowercase()
+        // Match user custom packages or any major UPI/merchant provider
         val isWhitelisted = config.targetPackages.isEmpty() ||
-                config.targetPackages.contains(packageName) ||
+                config.targetPackages.any { it.equals(packageName, ignoreCase = true) } ||
+                lowerPkg.contains("paisa") ||
+                lowerPkg.contains("phonepe") ||
+                lowerPkg.contains("paytm") ||
+                lowerPkg.contains("bharatpe") ||
+                lowerPkg.contains("bhim") ||
                 packageName in listOf(
+                    "com.google.android.apps.nbu.paisa.merchant",
                     "com.google.nbu.paisa.merchant",
+                    "com.google.android.apps.nbu.paisa.user",
                     "com.phonepe.app.business",
+                    "com.phonepe.app",
+                    "com.paytm.business",
                     "net.one97.paytm",
                     "com.bharatpe.app",
-                    "com.google.android.apps.nbu.paisa.user"
+                    "com.bharatpe.merchant",
+                    "in.org.npci.upiapp"
                 )
 
-        if (!isWhitelisted) return
+        if (!isWhitelisted) {
+            Log.d(TAG, "Ignoring non-whitelisted package: $packageName")
+            return
+        }
 
         // Parse payment using multi-app engine and non-payment filter
-        val payment = UpiPaymentParser.parse(title, text, packageName) ?: return
+        val payment = UpiPaymentParser.parse(title, text, packageName)
+        if (payment == null) {
+            Log.d(TAG, "Notification from $packageName did not match any payment pattern: title='$title', text='$text'")
+            return
+        }
 
         // Compute deterministic SHA-256 idempotency key
         val idempotencyKey = IdempotencyGenerator.create(

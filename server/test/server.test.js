@@ -60,7 +60,7 @@ function testUpiRegexParsing() {
   console.log('\n[Test 3] UPI Multi-App Regex Parsing Suite');
 
   // GPay Business primary pattern
-  const gpayRegex = /₹([0-9,]+(?:\.[0-9]{1,2})?)\s+received\s+from\s+(.+?)\s+at\s+([0-9:]+(?:\s*[ap]m)?)/i;
+  const gpayRegex = /(?:[₹]|Rs\.?)*\s*([0-9,]+(?:\.[0-9]{1,2})?)\s+received\s+from\s+(.+?)(?:\s+at\s+([0-9:]+(?:\s*[ap]m)?))?$/i;
   const gpaySample = '₹1.01 received from AARAV MISHRA at 12:05 am';
   const gpayMatch = gpaySample.match(gpayRegex);
 
@@ -72,6 +72,19 @@ function testUpiRegexParsing() {
     amount: gpayMatch[1],
     payer: gpayMatch[2],
     time: gpayMatch[3]
+  });
+
+  // Real device screenshot sample: "Payments you receive will be shown here \n ₹1.02 received from UTKARSH R at 2:54 pm"
+  const realSample = '₹1.02 received from UTKARSH R at 2:54 pm';
+  const realMatch = realSample.match(gpayRegex);
+  assert(realMatch, 'Real device sample must match');
+  assert.strictEqual(realMatch[1], '1.02');
+  assert.strictEqual(realMatch[2], 'UTKARSH R');
+  assert.strictEqual(realMatch[3], '2:54 pm');
+  console.log('  ✓ Real Device Screenshot parsed:', {
+    amount: realMatch[1],
+    payer: realMatch[2],
+    time: realMatch[3]
   });
 
   // PhonePe Business pattern

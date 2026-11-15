@@ -19,6 +19,20 @@ class UpiPaymentParserTest {
     }
 
     @Test
+    fun parseRealGooglePayBusinessFromScreenshot() {
+        val title = "Payments you receive will be shown here"
+        val text = "₹1.02 received from UTKARSH R at 2:54 pm"
+        val pkg = "com.google.android.apps.nbu.paisa.merchant"
+
+        val parsed = UpiPaymentParser.parse(title, text, pkg)
+        assertNotNull("Real device payment from screenshot must parse", parsed)
+        assertEquals(1.02, parsed!!.amount, 0.001)
+        assertEquals("UTKARSH R", parsed.payerName)
+        assertEquals("2:54 pm", parsed.notificationTime)
+        assertEquals(pkg, parsed.sourceApp)
+    }
+
+    @Test
     fun parsePhonePeBusiness() {
         val sample = "Received ₹500.00 from RAMESH K via PhonePe"
         val parsed = UpiPaymentParser.parse("", sample, "com.phonepe.app.business")
