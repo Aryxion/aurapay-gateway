@@ -43,11 +43,6 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android command-line tools
-        uses: android-actions/setup-android@v3
-        with:
-          log-accepted-android-sdk-licenses: false
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
@@ -57,10 +52,12 @@ jobs:
           echo "APP_VERSION=${RAW_TAG}" >> "$GITHUB_ENV"
           echo "Building version: ${RAW_TAG}"
 
-      - name: Install Android SDK packages
-        run: sdkmanager --install 'platforms;android-36.1' 'build-tools;36.0.0'
+      - name: Accept Android SDK licenses & setup platform
+        run: |
+          yes | sdkmanager --licenses 2>/dev/null || true
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 2>/dev/null || true
 
-      - name: Build APKs
+      - name: Build APKs with Gradle
         run: |
           chmod +x gradlew
           ./gradlew :app:assembleDebug :app:assembleRelease \
