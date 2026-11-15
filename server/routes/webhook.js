@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const PaymentEvent = require('../models/PaymentEvent');
-const Order = require('../models/Order');
+const storage = require('../services/storage');
 const { verifyHmac } = require('../middleware/auth');
 
 /**
@@ -38,7 +37,7 @@ router.post('/', verifyHmac, async (req, res) => {
     }
 
     // ── Deduplication Check ──────────────────────────────────────────────────
-    const existing = await PaymentEvent.findOne({ idempotencyKey });
+    const existing = await storage.findPaymentEvent(idempotencyKey);
     if (existing) {
       return res.status(200).json({
         success: true,
@@ -51,24 +50,7 @@ router.post('/', verifyHmac, async (req, res) => {
     }
 
     // ── Atomic Order Matching ────────────────────────────────────────────────
-    // Look for a PENDING order matching this exact amount (oldest first)
-    const pendingOrder = await Order.findOneAndUpdate(
-      {
-        amount: numericAmount,
-        status: 'PENDING'
-      },
-      {
-        $set: {
-          status: 'CONFIRMED',
-          matchedPaymentKey: idempotencyKey,
-          confirmedAt: new Date()
-        }
-      },
-      {
-        sort: { createdAt: 1 },
-        new: true
-      }
-    );
+    const pendingOrder = await storage.matchAndConfirmPendingOrder(numericAmount, idempotencyKey);
 
     let paymentStatus = 'UNMATCHED_ORPHAN';
     let matchedOrderId = null;
@@ -81,7 +63,7 @@ router.post('/', verifyHmac, async (req, res) => {
     // ── Record Payment Event ─────────────────────────────────────────────────
     let event;
     try {
-      event = await PaymentEvent.create({
+      event = await storage.createPaymentEvent({
         idempotencyKey,
         amount: numericAmount,
         payerName: (payerName || '').trim(),
@@ -95,7 +77,7 @@ router.post('/', verifyHmac, async (req, res) => {
         signatureVerified: true
       });
     } catch (dbErr) {
-      // Catch MongoDB unique index race condition
+      // Catch duplicate key race condition
       if (dbErr.code === 11000) {
         return res.status(200).json({
           success: true,

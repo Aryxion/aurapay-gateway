@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const PaymentEvent = require('../models/PaymentEvent');
-const Order = require('../models/Order');
+const storage = require('../services/storage');
 
 /**
  * GET /api/relay/orphans
@@ -9,9 +8,7 @@ const Order = require('../models/Order');
  */
 router.get('/', async (req, res) => {
   try {
-    const orphans = await PaymentEvent.find({ status: 'UNMATCHED_ORPHAN' })
-      .sort({ captureTimestamp: -1 })
-      .lean();
+    const orphans = await storage.listOrphans();
 
     return res.status(200).json({
       success: true,
@@ -35,39 +32,12 @@ router.post('/claim', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing idempotencyKey' });
     }
 
-    const event = await PaymentEvent.findOne({ idempotencyKey });
+    const targetOrderId = orderId || customerId || `MANUAL-${Date.now()}`;
+    const event = await storage.claimOrphan(idempotencyKey, targetOrderId, claimedBy);
+
     if (!event) {
       return res.status(404).json({ success: false, error: 'Payment event not found' });
     }
-
-    if (event.status === 'MATCHED_CREDITED') {
-      return res.status(400).json({
-        success: false,
-        error: `Payment already matched to Order ${event.matchedOrderId}`
-      });
-    }
-
-    const targetOrderId = orderId || customerId || `MANUAL-${Date.now()}`;
-
-    // If an existing order exists, mark it confirmed
-    if (orderId) {
-      await Order.findOneAndUpdate(
-        { orderId },
-        {
-          $set: {
-            status: 'CONFIRMED',
-            matchedPaymentKey: idempotencyKey,
-            confirmedAt: new Date()
-          }
-        }
-      );
-    }
-
-    event.status = 'MATCHED_CREDITED';
-    event.matchedOrderId = targetOrderId;
-    event.claimedBy = claimedBy || 'Operator (Mobile App)';
-    event.claimedAt = new Date();
-    await event.save();
 
     return res.status(200).json({
       success: true,

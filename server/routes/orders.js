@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Order = require('../models/Order');
+const storage = require('../services/storage');
 
 /**
  * POST /api/orders
@@ -14,7 +14,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing orderId or amount' });
     }
 
-    const order = await Order.create({
+    const order = await storage.createOrder({
       orderId: orderId.trim(),
       amount: parseFloat(amount),
       customerName: customerName ? customerName.trim() : 'Customer',
@@ -41,8 +41,7 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { status } = req.query;
-    const filter = status ? { status } : {};
-    const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(50).lean();
+    const orders = await storage.listOrders(status);
 
     return res.status(200).json({
       success: true,
